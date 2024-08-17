@@ -191,6 +191,20 @@ def navigate(page):
         show_map()
 
 def show_camera():
+    # Initialize camera capture
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+
+    def update_frame():
+        # Read frame from the camera
+        ret, frame = cap.read()
+        if ret:
+            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(cv2image)
+            imgtk = ImageTk.PhotoImage(image=img)
+            camera_label.imgtk = imgtk
+            camera_label.config(image=imgtk)
+        camera_label.after(10, update_frame)  # Refresh frame every 10ms
+
     def capture_image():
         # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -205,27 +219,35 @@ def show_camera():
             '-vframes', '1',
             image_filename
         ]
-        subprocess.run(command, check=True)
+        try:
+            subprocess.run(command, check=True)
+            print(f"Image captured and saved as {image_filename}")
 
-        # Load and display the captured image
-        if os.path.exists(image_filename):
-            image = Image.open(image_filename)
-            tk_image = ImageTk.PhotoImage(image)
-            camera_label.config(image=tk_image)
-            camera_label.image = tk_image  # Keep a reference to avoid garbage collection
-            print(f"Image captured and displayed from {image_filename}")
-        else:
-            print("Error: Captured image not found.")
+            # Load and display the captured image
+            if os.path.exists(image_filename):
+                image = Image.open(image_filename)
+                tk_image = ImageTk.PhotoImage(image)
+                camera_label.config(image=tk_image)
+                camera_label.image = tk_image  # Keep a reference to avoid garbage collection
+            else:
+                print("Error: Captured image not found.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error capturing image: {e}")
 
+    # Create overlay frame
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
 
+    # Create label to display video feed
     camera_label = Label(overlay_frame)
     camera_label.pack(fill='both', expand=True)
 
+    # Create capture button
     capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
 
+    # Start updating the video feed
+    update_frame()
 # Create main window
 root = Tk()
 root.title("Medplant")
