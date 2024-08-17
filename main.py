@@ -1,7 +1,9 @@
 import threading
 import queue
 import time
+from datetime import datetime
 from tkinter import *
+import subprocess
 from tkinter.ttk import Style
 from decimal import Decimal, getcontext
 import geocoder  # Import geocoder library for location
@@ -189,25 +191,31 @@ def navigate(page):
         show_map()
 
 def show_camera():
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-
-    def update_frame():
-        ret, frame = cap.read()
-        if ret:
-            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(cv2image)
-            imgtk = ImageTk.PhotoImage(image=img)
-            camera_label.imgtk = imgtk
-            camera_label.config(image=imgtk)
-        camera_label.after(10, update_frame)
-
     def capture_image():
-        ret, frame = cap.read()
-        if ret:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_path = os.path.join(os.getcwd(), f"captured_image_{timestamp}.png")
-            cv2.imwrite(file_path, frame)
-            print(f"Image saved to {file_path}")
+        # Generate a timestamp for the filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        image_filename = f'captured_frame_{timestamp}.png'
+
+        # Run ffmpeg to capture a frame from the camera
+        command = [
+            'ffmpeg',
+            '-f', 'video4linux2',
+            '-i', '/dev/video0',
+            '-vf', 'scale=320:340',
+            '-vframes', '1',
+            image_filename
+        ]
+        subprocess.run(command, check=True)
+
+        # Load and display the captured image
+        if os.path.exists(image_filename):
+            image = Image.open(image_filename)
+            tk_image = ImageTk.PhotoImage(image)
+            camera_label.config(image=tk_image)
+            camera_label.image = tk_image  # Keep a reference to avoid garbage collection
+            print(f"Image captured and displayed from {image_filename}")
+        else:
+            print("Error: Captured image not found.")
 
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
@@ -217,8 +225,6 @@ def show_camera():
 
     capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
-
-    update_frame()
 
 # Create main window
 root = Tk()
