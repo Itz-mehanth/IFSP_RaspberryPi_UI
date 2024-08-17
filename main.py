@@ -3,6 +3,7 @@ import queue
 import time
 from tkinter import *
 from tkinter.ttk import Style
+from decimal import Decimal, getcontext
 import geocoder  # Import geocoder library for location
 
 import cv2
@@ -18,6 +19,8 @@ firebase_admin.initialize_app(cred)
 
 # Initialize Firestore
 db = firestore.client()
+
+getcontext().prec = 50
 
 # Global variables for selected state
 gallery_selected = True
@@ -104,8 +107,8 @@ def show_map():
     if markers:
         for marker in markers:
             for coord in marker["coordinates"]:
-                latitude = float(coord[0])
-                longitude = float(coord[1])
+                latitude = Decimal(coord[0])
+                longitude = Decimal(coord[1])
                 map_widget.set_marker(latitude, longitude, text=marker["name"])
     else:
         map_widget.set_position(0, 0)
