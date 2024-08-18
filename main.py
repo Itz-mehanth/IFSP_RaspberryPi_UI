@@ -18,18 +18,25 @@ import time
 import string
 import pynmea2
 def getLoc():
-    ser=serial.Serial("/dev/ttyS0", baudrate=9600, timeout=1)
-    dataout =pynmea2.NMEAStreamReader()
-    newdata=ser.readline()
-    #print(newdata)
-    if '$GPRMC' in str(newdata):
-        print(newdata.decode('utf-8'))
-        newmsg=pynmea2.parse(newdata.decode('utf-8'))
-        lat=newmsg.latitude
-        lng=newmsg.longitude
-        gps = "Latitude=" + str(lat) + "and Longitude=" +str(lng)
-        print(gps)
-        return [lat,lng]
+    try:
+        ser = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=1)
+        dataout = pynmea2.NMEAStreamReader()
+        newdata = ser.readline()
+        if '$GPRMC' in str(newdata):
+            print(newdata.decode('utf-8'))
+            newmsg = pynmea2.parse(newdata.decode('utf-8'))
+            lat = newmsg.latitude
+            lng = newmsg.longitude
+            gps = f"Latitude={lat} and Longitude={lng}"
+            print(gps)
+            return [lat, lng]
+    except serial.SerialException as e:
+        print(f"SerialException: {e}")
+    except pynmea2.ParseError as e:
+        print(f"ParseError: {e}")
+    except Exception as e:
+        print(f"Exception: {e}")
+
 # Initialize Firebase
 cred = credentials.Certificate('assets/serviceAccountKey.json')
 firebase_admin.initialize_app(cred)
