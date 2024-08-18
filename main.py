@@ -19,23 +19,41 @@ import string
 import pynmea2
 def getLoc():
     try:
+        # Open the serial port with the specified baud rate and timeout
         ser = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=1)
         dataout = pynmea2.NMEAStreamReader()
-        newdata = ser.readline()
-        if '$GPRMC' in str(newdata):
-            print(newdata.decode('utf-8'))
-            newmsg = pynmea2.parse(newdata.decode('utf-8'))
-            lat = newmsg.latitude
-            lng = newmsg.longitude
-            gps = f"Latitude={lat} and Longitude={lng}"
-            print(gps)
-            return [lat, lng]
+
+        while True:
+            newdata = ser.readline()
+            if newdata:
+                try:
+                    # Decode and parse the NMEA sentence
+                    decoded_data = newdata.decode('utf-8')
+                    if '$GPRMC' in decoded_data:
+                        print(f"Raw data: {decoded_data}")
+                        newmsg = pynmea2.parse(decoded_data)
+                        lat = newmsg.latitude
+                        lng = newmsg.longitude
+
+                        if lat and lng:
+                            gps = f"Latitude={lat} and Longitude={lng}"
+                            print(gps)
+                            return [lat, lng]
+                        else:
+                            print("Invalid latitude or longitude.")
+                except pynmea2.ParseError as e:
+                    print(f"ParseError: {e}")
+                except Exception as e:
+                    print(f"Exception during parsing: {e}")
+            else:
+                print("No data received.")
     except serial.SerialException as e:
         print(f"SerialException: {e}")
-    except pynmea2.ParseError as e:
-        print(f"ParseError: {e}")
     except Exception as e:
         print(f"Exception: {e}")
+
+    # If the loop exits without returning valid coordinates
+    return [None, None]
 
 # Initialize Firebase
 cred = credentials.Certificate('assets/serviceAccountKey.json')
