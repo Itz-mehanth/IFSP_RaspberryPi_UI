@@ -231,31 +231,37 @@ def show_camera():
         # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         geopoint = getLoc()
-        image_filename = f'captured_frame_{timestamp}/{geopoint[0]}/{geopoint[0]}.png'
 
-        # Run ffmpeg to capture a frame from the camera
-        command = [
-            'ffmpeg',
-            '-f', 'video4linux2',
-            '-i', '/dev/video0',
-            '-vf', 'scale=320:340',
-            '-vframes', '1',
-            image_filename
-        ]
-        try:
-            subprocess.run(command, check=True)
-            print(f"Image captured and saved as {image_filename}")
+        if geopoint:  # Check if geopoint is not None
+            latitude = geopoint[0]
+            longitude = geopoint[1]
+            image_filename = f'captured_frame_{timestamp}/{latitude}/{longitude}.png'
 
-            # Load and display the captured image
-            if os.path.exists(image_filename):
-                image = Image.open(image_filename)
-                tk_image = ImageTk.PhotoImage(image)
-                camera_label.config(image=tk_image)
-                camera_label.image = tk_image  # Keep a reference to avoid garbage collection
-            else:
-                print("Error: Captured image not found.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error capturing image: {e}")
+            # Run ffmpeg to capture a frame from the camera
+            command = [
+                'ffmpeg',
+                '-f', 'video4linux2',
+                '-i', '/dev/video0',
+                '-vf', 'scale=320:340',
+                '-vframes', '1',
+                image_filename
+            ]
+            try:
+                subprocess.run(command, check=True)
+                print(f"Image captured and saved as {image_filename}")
+
+                # Load and display the captured image
+                if os.path.exists(image_filename):
+                    image = Image.open(image_filename)
+                    tk_image = ImageTk.PhotoImage(image)
+                    camera_label.config(image=tk_image)
+                    camera_label.image = tk_image  # Keep a reference to avoid garbage collection
+                else:
+                    print("Error: Captured image not found.")
+            except subprocess.CalledProcessError as e:
+                print(f"Error capturing image: {e}")
+        else:
+            print("Error: GPS location not available.")
 
     # Create overlay frame
     overlay_frame = Frame(main_frame)
