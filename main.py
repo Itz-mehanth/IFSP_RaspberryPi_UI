@@ -231,6 +231,11 @@ def show_camera():
         # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         geopoint = getLoc()
+        while not geopoint:  # Keep checking until geopoint is not None
+            print("Waiting for GPS location...")
+            time.sleep(1)  # Wait for 1 second before retrying
+            geopoint = getLoc()
+
 
         if geopoint:  # Check if geopoint is not None
             latitude = geopoint[0]
