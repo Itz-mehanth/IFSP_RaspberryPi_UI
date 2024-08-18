@@ -7,14 +7,29 @@ import subprocess
 from tkinter.ttk import Style
 from decimal import Decimal, getcontext
 import geocoder  # Import geocoder library for location
-
 import cv2
 from PIL import Image, ImageTk
 import os
 from tkintermapview import TkinterMapView
 import firebase_admin
 from firebase_admin import credentials, firestore
-
+import serial
+import time
+import string
+import pynmea2
+def getLoc():
+    ser=serial.Serial("/dev/ttyAMA0", baudrate=9600, timeout=1)
+    dataout =pynmea2.NMEAStreamReader()
+    newdata=ser.readline()
+    #print(newdata)
+    if '$GPRMC' in str(newdata):
+        print(newdata.decode('utf-8'))
+        newmsg=pynmea2.parse(newdata.decode('utf-8'))
+        lat=newmsg.latitude
+        lng=newmsg.longitude
+        gps = "Latitude=" + str(lat) + "and Longitude=" +str(lng)
+        print(gps)
+        return [lat,lng]
 # Initialize Firebase
 cred = credentials.Certificate('assets/serviceAccountKey.json')
 firebase_admin.initialize_app(cred)
@@ -208,7 +223,8 @@ def show_camera():
     def capture_image():
         # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        image_filename = f'captured_frame_{timestamp}.png'
+        geopoint = getLoc()
+        image_filename = f'captured_frame_{timestamp}/{geopoint[0]}/{geopoint[0]}.png'
 
         # Run ffmpeg to capture a frame from the camera
         command = [
