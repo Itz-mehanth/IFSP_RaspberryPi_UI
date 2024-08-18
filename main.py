@@ -17,6 +17,8 @@ import serial
 import time
 import string
 import pynmea2
+
+
 def getLoc():
     try:
         # Open the serial port with the specified baud rate and timeout
@@ -55,6 +57,7 @@ def getLoc():
     # If the loop exits without returning valid coordinates
     return [None, None]
 
+
 # Initialize Firebase
 cred = credentials.Certificate('assets/serviceAccountKey.json')
 firebase_admin.initialize_app(cred)
@@ -70,6 +73,7 @@ camera_selected = False
 map_selected = False
 cache = {}
 data_queue = queue.Queue()  # Queue for safely passing data between threads
+
 
 # Function to fetch data in a background thread
 def fetch_plant_data():
@@ -103,6 +107,7 @@ def fetch_plant_data():
     data_queue.put(markers)  # Pass the data to the main thread via the queue
     print("Data fetched and added to queue.")
 
+
 # Function to fetch and cache data in a separate thread
 def initialize_cache():
     def fetch_and_cache():
@@ -110,6 +115,7 @@ def initialize_cache():
 
     thread = threading.Thread(target=fetch_and_cache)
     thread.start()
+
 
 # Function to periodically check the queue and update the UI
 def check_queue():
@@ -124,12 +130,15 @@ def check_queue():
 
     root.after(100, check_queue)  # Check the queue every 100ms
 
+
 # Example: Start periodic cache refresh every hour
 initialize_cache()
+
 
 def get_current_location():
     g = geocoder.ip('me')
     return g.latlng  # Returns a list [latitude, longitude]
+
 
 def show_map():
     for widget in main_frame.winfo_children():
@@ -156,6 +165,7 @@ def show_map():
         map_widget.set_position(0, 0)
         map_widget.set_zoom(1)
 
+
 # Function to create resized icon images for Tkinter buttons
 def createIcon(path, selected, size=(32, 32)):
     if selected:
@@ -167,6 +177,7 @@ def createIcon(path, selected, size=(32, 32)):
     icon = icon.resize(size)
     tk_icon = ImageTk.PhotoImage(icon)
     return tk_icon
+
 
 def show_gallery():
     images_dir = os.getcwd()
@@ -194,6 +205,7 @@ def show_gallery():
         if col >= max_cols:
             col = 0
             row += 1
+
 
 # Function to handle page navigation and update the main frame content
 def navigate(page):
@@ -230,6 +242,7 @@ def navigate(page):
     elif page == 'map':
         show_map()
 
+
 def show_camera():
     # Initialize camera capture
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -249,11 +262,10 @@ def show_camera():
         # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         geopoint = getLoc()
-        while not geopoint:  # Keep checking until geopoint is not None
+        while geopoint == [None, None]:  # Keep checking until geopoint is not [None, None]
             print("Waiting for GPS location...")
             time.sleep(1)  # Wait for 1 second before retrying
             geopoint = getLoc()
-
 
         if geopoint:  # Check if geopoint is not None
             latitude = geopoint[0]
@@ -300,6 +312,8 @@ def show_camera():
 
     # Start updating the video feed
     update_frame()
+
+
 # Create main window
 root = Tk()
 root.title("Medplant")
