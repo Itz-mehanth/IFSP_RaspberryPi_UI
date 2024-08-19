@@ -19,7 +19,6 @@ import time
 import string
 import pynmea2
 
-
 def getLoc():
     try:
         # Open the serial port with the specified baud rate and timeout
@@ -30,10 +29,11 @@ def getLoc():
             newdata = ser.readline()
             if newdata:
                 try:
-                    # Decode and parse the NMEA sentence
-                    decoded_data = newdata.decode('utf-8')
-                    if '$GPRMC' in decoded_data:
-                        print(f"Raw data: {decoded_data}")
+                    decoded_data = newdata.decode('utf-8', errors='ignore')
+                    print(f"Raw data: {decoded_data}")
+
+                    # Check if the line starts with a valid NMEA sentence
+                    if decoded_data.startswith('$GPRMC'):
                         newmsg = pynmea2.parse(decoded_data)
                         lat = newmsg.latitude
                         lng = newmsg.longitude
