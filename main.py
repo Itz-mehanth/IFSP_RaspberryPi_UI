@@ -315,7 +315,7 @@ def show_camera():
         if platform.system() == 'Windows':
             cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         elif platform.system() == 'Linux':  # This includes Raspberry Pi
-            cap = cv2.VideoCapture(0)
+            cap = cv2.VideoCapture(1)
         else:
             print(f"Unsupported OS: {platform.system()}")
             return
@@ -347,8 +347,6 @@ def show_camera():
         finally:
             cap.release()  # Release the camera resource
 
-
-
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
 
@@ -359,6 +357,7 @@ def show_camera():
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
 
     update_frame()
+
 
 
 # Create main window
