@@ -333,8 +333,8 @@ def show_camera():
                 print("Error: Failed to capture image.")
         except Exception as e:
             print(f"Error capturing image: {e}")
-
-    cap.release()  # Release the camera resource
+        finally:
+            cap.release()  # Release the camera resource
 
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
