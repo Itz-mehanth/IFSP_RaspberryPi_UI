@@ -1,6 +1,7 @@
 import threading
 import queue
 import time
+import platform
 from datetime import datetime
 from tkinter import *
 import subprocess
@@ -244,8 +245,17 @@ def navigate(page):
 
 
 def show_camera():
-    # Initialize camera capture
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    # Detect the operating system
+    system = platform.system()
+
+    # Initialize camera capture based on OS
+    if system == 'Windows':
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    elif system == 'Linux':  # This includes Raspberry Pi
+        cap = cv2.VideoCapture(0)
+    else:
+        print(f"Unsupported OS: {system}")
+        return
 
     def update_frame():
         # Read frame from the camera
@@ -259,58 +269,67 @@ def show_camera():
         camera_label.after(10, update_frame)  # Refresh frame every 10ms
 
     def capture_image():
-        # Generate a timestamp for the filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         geopoint = getLoc()
-        while geopoint == [None, None]:  # Keep checking until geopoint is not [None, None]
+
+        while geopoint == [None, None]:
             print("Waiting for GPS location...")
-            time.sleep(1)  # Wait for 1 second before retrying
+            time.sleep(1)
             geopoint = getLoc()
 
-        if geopoint:  # Check if geopoint is not None
+        if geopoint:
             latitude = geopoint[0]
             longitude = geopoint[1]
             image_filename = f'captured_frame_{timestamp}/{latitude}/{longitude}.png'
 
-            # Run ffmpeg to capture a frame from the camera
-            command = [
-                'ffmpeg',
-                '-f', 'video4linux2',
-                '-i', '/dev/video0',
-                '-vf', 'scale=320:340',
-                '-vframes', '1',
-                image_filename
-            ]
+            if system == 'Linux':
+                # Run ffmpeg to capture a frame from the camera on Linux/Raspberry Pi
+                command = [
+                    'ffmpeg',
+                    '-f', 'video4linux2',
+                    '-i', '/dev/video0',
+                    '-vf', 'scale=320:340',
+                    '-vframes', '1',
+                    image_filename
+                ]
+            elif system == 'Windows':
+                # Windows specific command to capture a frame using ffmpeg or OpenCV methods
+                # Example (this is more complex and might need adjustments):
+                command = [
+                    'ffmpeg',
+                    '-f', 'dshow',
+                    '-i', 'video="Your Camera Name"',
+                    '-vf', 'scale=320:340',
+                    '-vframes', '1',
+                    image_filename
+                ]
+            else:
+                print("Error: Unsupported OS for image capture.")
+                return
+
             try:
                 subprocess.run(command, check=True)
                 print(f"Image captured and saved as {image_filename}")
 
-                # Load and display the captured image
                 if os.path.exists(image_filename):
                     image = Image.open(image_filename)
                     tk_image = ImageTk.PhotoImage(image)
                     camera_label.config(image=tk_image)
-                    camera_label.image = tk_image  # Keep a reference to avoid garbage collection
+                    camera_label.image = tk_image
                 else:
                     print("Error: Captured image not found.")
             except subprocess.CalledProcessError as e:
                 print(f"Error capturing image: {e}")
-        else:
-            print("Error: GPS location not available.")
 
-    # Create overlay frame
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
 
-    # Create label to display video feed
     camera_label = Label(overlay_frame)
     camera_label.pack(fill='both', expand=True)
 
-    # Create capture button
     capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
 
-    # Start updating the video feed
     update_frame()
 
 
