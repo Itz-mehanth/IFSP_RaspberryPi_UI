@@ -191,7 +191,10 @@ def createIcon(path, selected, size=(32, 32)):
 
 
 def show_gallery():
-    images_dir = os.getcwd()
+    if platform.system() == "Windows":
+        images_dir = 'C:/raspberry_images'  # Update this path as needed
+    else:  # Assuming it's a Raspberry Pi or Linux-based system
+        images_dir = '/home/mehant/Pictures'  # Update this path as needed
     image_files = [f for f in os.listdir(images_dir) if f.startswith('captured_image_') and f.endswith('.png')]
 
     gallery_frame = Frame(main_frame)
