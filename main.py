@@ -29,21 +29,25 @@ def getLoc():
             newdata = ser.readline()
             if newdata:
                 try:
-                    decoded_data = newdata.decode('utf-8', errors='ignore')
-                    print(f"Raw data: {decoded_data}")
+                    decoded_data = newdata.decode('utf-8', errors='ignore').strip()
 
-                    # Check if the line starts with a valid NMEA sentence
-                    if decoded_data.startswith('$GPRMC'):
-                        newmsg = pynmea2.parse(decoded_data)
-                        lat = newmsg.latitude
-                        lng = newmsg.longitude
+                    if decoded_data.startswith('$'):
+                        print(f"Raw data: {decoded_data}")
 
-                        if lat and lng:
-                            gps = f"Latitude={lat} and Longitude={lng}"
-                            print(gps)
-                            return [lat, lng]
-                        else:
-                            print("Invalid latitude or longitude.")
+                        if '$GPRMC' in decoded_data:
+                            newmsg = pynmea2.parse(decoded_data)
+                            lat = newmsg.latitude
+                            lng = newmsg.longitude
+
+                            if lat and lng:
+                                gps = f"Latitude={lat} and Longitude={lng}"
+                                print(gps)
+                                return [lat, lng]
+                            else:
+                                print("Invalid latitude or longitude.")
+                    else:
+                        print(f"Ignored non-NMEA data: {decoded_data}")
+
                 except pynmea2.ParseError as e:
                     print(f"ParseError: {e}")
                 except Exception as e:
