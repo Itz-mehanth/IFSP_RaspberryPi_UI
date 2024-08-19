@@ -195,7 +195,17 @@ def show_gallery():
         images_dir = 'C:/raspberry_images'  # Update this path as needed
     else:  # Assuming it's a Raspberry Pi or Linux-based system
         images_dir = '/home/mehant/Pictures'  # Update this path as needed
-    image_files = [f for f in os.listdir(images_dir) if f.startswith('captured_image_') and f.endswith('.png')]
+
+    # Verify directory existence
+    if not os.path.exists(images_dir):
+        print(f"Error: Directory {images_dir} does not exist.")
+        return
+
+    # List all files in the directory
+    image_files = [f for f in os.listdir(images_dir) if f.startswith('captured_frame_') and f.endswith('.png')]
+
+    # Debugging: Print found image files
+    print(f"Image files found: {image_files}")
 
     gallery_frame = Frame(main_frame)
     gallery_frame.pack(fill='both', expand=True)
@@ -207,18 +217,22 @@ def show_gallery():
 
     for image_file in image_files:
         image_path = os.path.join(images_dir, image_file)
-        image = Image.open(image_path)
-        image.thumbnail(thumbnail_size)
-        tk_image = ImageTk.PhotoImage(image)
+        try:
+            print(f"Loading image from: {image_path}")  # Debugging line
+            image = Image.open(image_path)
+            image.thumbnail(thumbnail_size)
+            tk_image = ImageTk.PhotoImage(image)
 
-        image_label = Label(gallery_frame, image=tk_image)
-        image_label.image = tk_image  # Keep a reference to avoid garbage collection
-        image_label.grid(row=row, column=col, padx=5, pady=5)
+            image_label = Label(gallery_frame, image=tk_image)
+            image_label.image = tk_image  # Keep a reference to avoid garbage collection
+            image_label.grid(row=row, column=col, padx=5, pady=5)
 
-        col += 1
-        if col >= max_cols:
-            col = 0
-            row += 1
+            col += 1
+            if col >= max_cols:
+                col = 0
+                row += 1
+        except Exception as e:
+            print(f"Error loading image {image_file}: {e}")
 
 
 # Function to handle page navigation and update the main frame content
@@ -283,6 +297,7 @@ def show_camera():
 
     def capture_image():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
         # Directory to save captured images
         if platform.system() == "Windows":
             save_dir = 'C:/raspberry_images'  # Update this path as needed
@@ -296,43 +311,42 @@ def show_camera():
         # File path to save the captured image
         image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
 
-        if platform.system() == 'Linux':
-            # Run ffmpeg to capture a frame from the camera on Linux/Raspberry Pi
-            command = [
-                'ffmpeg',
-                '-f', 'video4linux2',
-                '-i', '/dev/video0',
-                '-vf', 'scale=320:340',
-                '-vframes', '1',
-                image_filename
-            ]
-        elif platform.system() == 'Windows':
-            # Windows specific command to capture a frame using ffmpeg or OpenCV methods
-            command = [
-                'ffmpeg',
-                '-f', 'dshow',
-                '-i', 'video="USB Video Device"',
-                '-vf', 'scale=320:340',
-                '-vframes', '1',
-                image_filename
-            ]
+        # Initialize camera capture
+        if platform.system() == 'Windows':
+            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        elif platform.system() == 'Linux':  # This includes Raspberry Pi
+            cap = cv2.VideoCapture(0)
         else:
-            print("Error: Unsupported OS for image capture.")
+            print(f"Unsupported OS: {platform.system()}")
+            return
+
+        if not cap.isOpened():
+            print("Error: Could not open camera.")
             return
 
         try:
-            subprocess.run(command, check=True)
-            print(f"Image captured and saved as {image_filename}")
+            # Read a frame from the camera
+            ret, frame = cap.read()
+            if ret:
+                # Save the captured frame as an image file
+                cv2.imwrite(image_filename, frame)
+                print(f"Image captured and saved as {image_filename}")
 
-            if os.path.exists(image_filename):
-                image = Image.open(image_filename)
-                tk_image = ImageTk.PhotoImage(image)
-                camera_label.config(image=tk_image)
-                camera_label.image = tk_image
+                # Update the UI with the captured image
+                if os.path.exists(image_filename):
+                    image = Image.open(image_filename)
+                    tk_image = ImageTk.PhotoImage(image)
+                    camera_label.config(image=tk_image)
+                    camera_label.image = tk_image
+                else:
+                    print("Error: Captured image not found.")
             else:
-                print("Error: Captured image not found.")
-        except subprocess.CalledProcessError as e:
+                print("Error: Failed to capture image.")
+        except Exception as e:
             print(f"Error capturing image: {e}")
+        finally:
+            cap.release()  # Release the camera resource
+
 
 
     overlay_frame = Frame(main_frame)
