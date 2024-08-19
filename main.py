@@ -280,20 +280,20 @@ def show_camera():
 
     def capture_image():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # geopoint = getLoc()
+        # Directory to save captured images
+        if platform.system() == "Windows":
+            save_dir = 'C:/raspberry_images'  # Update this path as needed
+        else:  # Assuming it's a Raspberry Pi or Linux-based system
+            save_dir = '/home/mehant/Pictures'  # Update this path as needed
 
-        # while geopoint == [None, None]:
-        #     print("Waiting for GPS location...")
-        #     time.sleep(1)
-        #     geopoint = getLoc()
+        # Create the directory if it does not exist
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
 
-        # if geopoint:
-        #     latitude = geopoint[0]
-        #     longitude = geopoint[1]
-        #     image_filename = f'captured_frame_{timestamp}/{latitude}/{longitude}.png'
+        # File path to save the captured image
+        image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
 
-        image_filename = f'captured_frame_{timestamp}.png'
-        if system == 'Linux':
+        if platform.system() == 'Linux':
             # Run ffmpeg to capture a frame from the camera on Linux/Raspberry Pi
             command = [
                 'ffmpeg',
@@ -303,13 +303,12 @@ def show_camera():
                 '-vframes', '1',
                 image_filename
             ]
-        elif system == 'Windows':
+        elif platform.system() == 'Windows':
             # Windows specific command to capture a frame using ffmpeg or OpenCV methods
-            # Example (this is more complex and might need adjustments):
             command = [
                 'ffmpeg',
                 '-f', 'dshow',
-                '-i', 'video="Your Camera Name"',
+                '-i', 'video="USB Video Device"',
                 '-vf', 'scale=320:340',
                 '-vframes', '1',
                 image_filename
@@ -331,6 +330,7 @@ def show_camera():
                 print("Error: Captured image not found.")
         except subprocess.CalledProcessError as e:
             print(f"Error capturing image: {e}")
+
 
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
