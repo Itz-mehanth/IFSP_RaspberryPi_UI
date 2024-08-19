@@ -21,8 +21,14 @@ import pynmea2
 
 def getLoc():
     try:
+        # Determine the serial port based on the operating system
+        if platform.system() == "Windows":
+            port = "COM3"  # Update this to your actual COM port on Windows
+        else:  # Assuming it's a Raspberry Pi or Linux-based system
+            port = "/dev/ttyS0"  # Update this if your GPS module is on a different port
+
         # Open the serial port with the specified baud rate and timeout
-        ser = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=1)
+        ser = serial.Serial(port, baudrate=9600, timeout=1)
         dataout = pynmea2.NMEAStreamReader()
 
         while True:
@@ -274,56 +280,57 @@ def show_camera():
 
     def capture_image():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        geopoint = getLoc()
+        # geopoint = getLoc()
 
-        while geopoint == [None, None]:
-            print("Waiting for GPS location...")
-            time.sleep(1)
-            geopoint = getLoc()
+        # while geopoint == [None, None]:
+        #     print("Waiting for GPS location...")
+        #     time.sleep(1)
+        #     geopoint = getLoc()
 
-        if geopoint:
-            latitude = geopoint[0]
-            longitude = geopoint[1]
-            image_filename = f'captured_frame_{timestamp}/{latitude}/{longitude}.png'
+        # if geopoint:
+        #     latitude = geopoint[0]
+        #     longitude = geopoint[1]
+        #     image_filename = f'captured_frame_{timestamp}/{latitude}/{longitude}.png'
 
-            if system == 'Linux':
-                # Run ffmpeg to capture a frame from the camera on Linux/Raspberry Pi
-                command = [
-                    'ffmpeg',
-                    '-f', 'video4linux2',
-                    '-i', '/dev/video0',
-                    '-vf', 'scale=320:340',
-                    '-vframes', '1',
-                    image_filename
-                ]
-            elif system == 'Windows':
-                # Windows specific command to capture a frame using ffmpeg or OpenCV methods
-                # Example (this is more complex and might need adjustments):
-                command = [
-                    'ffmpeg',
-                    '-f', 'dshow',
-                    '-i', 'video="Your Camera Name"',
-                    '-vf', 'scale=320:340',
-                    '-vframes', '1',
-                    image_filename
-                ]
+        image_filename = f'captured_frame_{timestamp}.png'
+        if system == 'Linux':
+            # Run ffmpeg to capture a frame from the camera on Linux/Raspberry Pi
+            command = [
+                'ffmpeg',
+                '-f', 'video4linux2',
+                '-i', '/dev/video0',
+                '-vf', 'scale=320:340',
+                '-vframes', '1',
+                image_filename
+            ]
+        elif system == 'Windows':
+            # Windows specific command to capture a frame using ffmpeg or OpenCV methods
+            # Example (this is more complex and might need adjustments):
+            command = [
+                'ffmpeg',
+                '-f', 'dshow',
+                '-i', 'video="Your Camera Name"',
+                '-vf', 'scale=320:340',
+                '-vframes', '1',
+                image_filename
+            ]
+        else:
+            print("Error: Unsupported OS for image capture.")
+            return
+
+        try:
+            subprocess.run(command, check=True)
+            print(f"Image captured and saved as {image_filename}")
+
+            if os.path.exists(image_filename):
+                image = Image.open(image_filename)
+                tk_image = ImageTk.PhotoImage(image)
+                camera_label.config(image=tk_image)
+                camera_label.image = tk_image
             else:
-                print("Error: Unsupported OS for image capture.")
-                return
-
-            try:
-                subprocess.run(command, check=True)
-                print(f"Image captured and saved as {image_filename}")
-
-                if os.path.exists(image_filename):
-                    image = Image.open(image_filename)
-                    tk_image = ImageTk.PhotoImage(image)
-                    camera_label.config(image=tk_image)
-                    camera_label.image = tk_image
-                else:
-                    print("Error: Captured image not found.")
-            except subprocess.CalledProcessError as e:
-                print(f"Error capturing image: {e}")
+                print("Error: Captured image not found.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error capturing image: {e}")
 
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
