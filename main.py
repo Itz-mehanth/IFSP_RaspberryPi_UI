@@ -19,7 +19,6 @@ import time
 import string
 import pynmea2
 
-
 def getLoc():
     try:
         # Determine the serial port based on the operating system
@@ -335,6 +334,8 @@ def show_camera():
         except Exception as e:
             print(f"Error capturing image: {e}")
 
+    cap.release()  # Release the camera resource
+
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
 
@@ -346,13 +347,6 @@ def show_camera():
 
     update_frame()
 
-    # Make sure to release the camera when the application is closed or done using it
-    def on_closing():
-        cap.release()  # Release the camera resource
-        cv2.destroyAllWindows()  # Close any OpenCV windows
-        root.destroy()  # Close the tkinter window
-
-    root.protocol("WM_DELETE_WINDOW", on_closing)  # Call on_closing when the window is closed
 
 
 # Create main window
