@@ -315,7 +315,7 @@ def show_camera():
         if platform.system() == 'Windows':
             cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         elif platform.system() == 'Linux':  # This includes Raspberry Pi
-            cap = cv2.VideoCapture(1)
+            cap = cv2.VideoCapture(0)
         else:
             print(f"Unsupported OS: {platform.system()}")
             return
