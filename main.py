@@ -313,21 +313,6 @@ def show_camera():
         # File path to save the captured image
         image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
 
-        # Initialize camera capture
-        if platform.system() == 'Windows':
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        elif platform.system() == 'Linux':  # This includes Raspberry Pi
-            cap = cv2.VideoCapture(0)  # Try index 0
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(1)
-        else:
-            print(f"Unsupported OS: {platform.system()}")
-            return
-
-        if not cap.isOpened():
-            print("Error: Could not open camera.")
-            return
-
         try:
             # Read a frame from the camera
             ret, frame = cap.read()
