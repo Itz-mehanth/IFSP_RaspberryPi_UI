@@ -282,6 +282,8 @@ def show_camera():
         cap = cv2.VideoCapture(0)  # Try index 0
         if not cap.isOpened():
             cap = cv2.VideoCapture(1)  # Try index 1 if 0 doesn't work
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(-1)  # Try index 1 if 0 doesn't work
     else:
         print(f"Unsupported OS: {system}")
         return
