@@ -272,20 +272,22 @@ def navigate(page):
 
 
 def show_camera():
-    # Detect the operating system
     system = platform.system()
 
     # Initialize camera capture based on OS
     if system == 'Windows':
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     elif system == 'Linux':  # This includes Raspberry Pi
-        cap = cv2.VideoCapture(1)
+        cap = cv2.VideoCapture(0)  # Try index 0 for most systems
     else:
         print(f"Unsupported OS: {system}")
         return
 
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        return
+
     def update_frame():
-        # Read frame from the camera
         ret, frame = cap.read()
         if ret:
             cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -293,13 +295,15 @@ def show_camera():
             imgtk = ImageTk.PhotoImage(image=img)
             camera_label.imgtk = imgtk
             camera_label.config(image=imgtk)
+        else:
+            print("Error: Failed to capture frame.")
         camera_label.after(10, update_frame)  # Refresh frame every 10ms
 
     def capture_image():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Directory to save captured images
-        if platform.system() == "Windows":
+        if system == "Windows":
             save_dir = 'C:/raspberry_images'  # Update this path as needed
         else:  # Assuming it's a Raspberry Pi or Linux-based system
             save_dir = '/home/mehant/Pictures'  # Update this path as needed
@@ -311,19 +315,6 @@ def show_camera():
         # File path to save the captured image
         image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
 
-        # Initialize camera capture
-        if platform.system() == 'Windows':
-            cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        elif platform.system() == 'Linux':  # This includes Raspberry Pi
-            cap = cv2.VideoCapture(0)
-        else:
-            print(f"Unsupported OS: {platform.system()}")
-            return
-
-        if not cap.isOpened():
-            print("Error: Could not open camera.")
-            return
-
         try:
             # Read a frame from the camera
             ret, frame = cap.read()
@@ -333,19 +324,18 @@ def show_camera():
                 print(f"Image captured and saved as {image_filename}")
 
                 # Update the UI with the captured image
-                if os.path.exists(image_filename):
-                    image = Image.open(image_filename)
-                    tk_image = ImageTk.PhotoImage(image)
-                    camera_label.config(image=tk_image)
-                    camera_label.image = tk_image
-                else:
-                    print("Error: Captured image not found.")
+                image = Image.open(image_filename)
+                tk_image = ImageTk.PhotoImage(image)
+                camera_label.config(image=tk_image)
+                camera_label.image = tk_image
             else:
                 print("Error: Failed to capture image.")
         except Exception as e:
             print(f"Error capturing image: {e}")
-        finally:
-            cap.release()  # Release the camera resource
+
+    root = Tk()
+    main_frame = Frame(root)
+    main_frame.pack(fill='both', expand=True)
 
     overlay_frame = Frame(main_frame)
     overlay_frame.pack(fill='both', expand=True)
