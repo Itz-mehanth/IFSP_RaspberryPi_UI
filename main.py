@@ -473,7 +473,7 @@ def show_gallery():
                 path = "C:/raspberry_images/"
             else:
                 path = "/home/mehant/Pictures/"
-            selection_label.bind("<Button-1>", lambda e: uploadToStorage("C:/raspberry_images/" + selected_image))
+            selection_label.bind("<Button-1>", lambda e: uploadToStorage(path + selected_image))
         else:
             selection_label.destroy()
 
