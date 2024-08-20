@@ -11,7 +11,6 @@ import geocoder  # Import geocoder library for location
 import cv2
 from PIL import Image, ImageTk
 import os
-
 from google.cloud.storage import bucket
 from tkintermapview import TkinterMapView
 import firebase_admin
@@ -470,6 +469,10 @@ def show_gallery():
             selection_label.destroy()
             selection_label = Label(topPanelGallery, text="Upload", foreground="blue")
             selection_label.pack(side=RIGHT, expand=True, fill='both')
+            if platform.system() == "Windows":
+                path = "C:/raspberry_images/"
+            else:
+                path = "/home/mehant/Pictures/"
             selection_label.bind("<Button-1>", lambda e: uploadToStorage("C:/raspberry_images/" + selected_image))
         else:
             selection_label.destroy()
@@ -623,7 +626,6 @@ def show_camera():
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
 
     update_frame()
-
 
 # Create main window
 root = Tk()
