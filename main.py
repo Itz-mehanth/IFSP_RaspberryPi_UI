@@ -1,10 +1,9 @@
 import threading
 import queue
-import time
 import platform
-from datetime import datetime
+from datetime import time, datetime
+import time
 from tkinter import *
-import subprocess
 from tkinter.ttk import Style
 from decimal import Decimal, getcontext
 import geocoder  # Import geocoder library for location
@@ -14,11 +13,199 @@ import os
 from google.cloud.storage import bucket
 from tkintermapview import TkinterMapView
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
 import serial
-import time
-import string
 import pynmea2
+from roboflow import Roboflow
+
+rf = Roboflow(api_key="EhNmtjx0o8TGBQI2Kvhr")
+project = rf.workspace().project("medplant")
+model = project.version(2).model
+
+# Initialize Firebase if it hasn't been already
+if not firebase_admin._apps:
+    try:
+        cred = credentials.Certificate('assets/serviceAccountKey.json')
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': 'medicinal-plant-82aa9.appspot.com'
+        })
+        print("Firebase initialization successful.")
+    except Exception as e:
+        print(f"Error initializing Firebase: {e}")
+
+# Initialize Firestore and Storage
+try:
+    db = firestore.client()
+    bucket = storage.bucket()
+    print("Firestore initialization successful.")
+except Exception as e:
+    print(f"Error initializing Firestore: {e}")
+
+
+# Global variables for threading and camera handling
+camera_thread = None
+inference_thread = None
+cap = None
+stop_event = None
+
+def showCamera():
+    global camera_thread
+    global inference_thread
+    global cap
+    global stop_event
+    global camera_label
+
+    system = platform.system()
+
+    # Initialize camera capture based on OS
+    if system == 'Windows':
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    elif system == 'Linux':  # This includes Raspberry Pi
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(1)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(-1)
+    else:
+        print(f"Unsupported OS: {system}")
+        return
+
+    # Check if the camera was successfully opened
+    if not cap.isOpened():
+        print("Error: Cannot open camera")
+        return
+
+    stop_event = threading.Event()
+    frame_queue = queue.Queue(maxsize=10)
+
+    def capture_frames():
+        while not stop_event.is_set():
+            ret, frame = cap.read()
+            if ret:
+                frame = cv2.resize(frame, (640, 480))
+                if not frame_queue.full():
+                    frame_queue.put(frame)
+            else:
+                print("Failed to capture frame")
+                break
+
+    def perform_inference():
+        while not stop_event.is_set():
+            if not frame_queue.empty():
+                frame = frame_queue.get()
+                try:
+                    infer_and_update(frame)
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
+
+    # Start the threads
+    camera_thread = threading.Thread(target=capture_frames, daemon=True)
+    inference_thread = threading.Thread(target=perform_inference, daemon=True)
+
+    camera_thread.start()
+
+    # Define the capture_image function
+    def capture_image():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Directory to save captured images
+        if platform.system() == "Windows":
+            save_dir = 'C:/raspberry_images'
+        else:  # Assuming it's a Raspberry Pi or Linux-based system
+            save_dir = '/home/mehant/Pictures'
+
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+
+        image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
+
+        try:
+            ret, frame = cap.read()
+            if ret:
+                cv2.imwrite(image_filename, frame)
+                print(f"Image captured and saved as {image_filename}")
+
+                if os.path.exists(image_filename):
+                    image = Image.open(image_filename)
+                    tk_image = ImageTk.PhotoImage(image)
+                    camera_label.config(image=tk_image)
+                    camera_label.image = tk_image
+                else:
+                    print("Error: Captured image not found.")
+            else:
+                print("Error: Failed to capture image.")
+        except Exception as e:
+            print(f"Error capturing image: {e}")
+
+    # UI setup for camera feed and capture button
+    overlay_frame = Frame(main_frame)
+    overlay_frame.pack(fill='both', expand=True)
+
+    camera_label = Label(overlay_frame)
+    camera_label.pack(fill='both', expand=True)
+
+    capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
+    capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
+
+    # Add a delay to ensure the camera is ready before starting the inference thread
+    time.sleep(1)
+    inference_thread.start()
+    def process_frame(frame):
+            # Resize the frame to the input size expected by the model
+            input_size = (416, 416)  # Example size; adjust based on your model's requirements
+            small_frame = frame
+
+            # Convert the frame to the format expected by the model
+            input_image = frame
+
+            # Perform inference using the Roboflow model
+            predictions = model.predict(input_image).json()
+
+            predictions_list = []
+            for prediction in predictions['predictions']:
+                x = int(prediction['x'])
+                y = int(prediction['y'])
+                width = int(prediction['width'])
+                height = int(prediction['height'])
+                label = prediction['class']
+                confidence = prediction['confidence']
+
+                start_point = (x - width // 2, y - height // 2)
+                end_point = (x + width // 2, y + height // 2)
+
+                prediction_dict = {
+                    'x': x,
+                    'y': y,
+                    'width': width,
+                    'height': height,
+                    'class': label,
+                    'confidence': confidence
+                }
+                predictions_list.append(prediction_dict)
+
+                # Draw bounding box on the small_frame (optional visualization)
+                color = (0, 255, 0)  # Green color for bounding box
+                thickness = 2  # Thickness of bounding box lines
+                cv2.rectangle(small_frame, start_point, end_point, color, thickness)
+
+                # Put the label above the bounding box
+                cv2.putText(small_frame, f"{label} ({confidence:.2f})", (start_point[0], start_point[1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+            return {'predictions': predictions_list}, small_frame
+
+    def infer_and_update(frame):
+        # Perform inference and process the result
+        result, small_frame = process_frame(frame)
+
+        # Convert the OpenCV frame (BGR) to a format suitable for Tkinter (RGB)
+        cv2image = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(cv2image)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        # Update the UI with the new image
+        camera_label.imgtk = imgtk
+        camera_label.config(image=imgtk)
 
 
 def getLoc():
@@ -70,13 +257,6 @@ def getLoc():
     # If the loop exits without returning valid coordinates
     return [None, None]
 
-
-# Initialize Firebase
-cred = credentials.Certificate('assets/serviceAccountKey.json')
-firebase_admin.initialize_app(cred)
-
-# Initialize Firestore
-db = firestore.client()
 
 getcontext().prec = 50
 
@@ -246,7 +426,6 @@ def open_in_app_keyboard(img_path):
     family_entry = Entry(text_frame, width=35)
     family_entry.pack(pady=2)
 
-
     # Scrollable Text Widget for the Short Description
     desc_label = Label(text_frame, text="Short Description:")
     desc_label.pack()
@@ -306,7 +485,7 @@ def open_in_app_keyboard(img_path):
     keys = [
         ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'Backspace'],
         ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', ':', '[', ']'],
-        ['Capslock', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '"', '\''],
+        ['Capslock', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '"', '\'', "Enter"],
         ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.'],
         [' ']
     ]
@@ -328,6 +507,9 @@ def open_in_app_keyboard(img_path):
             elif key == " ":
                 button = Button(key_row, text=key, relief="groove", width=20, height=key_height,
                                 command=lambda: insert_text(" "))
+            elif key == "Enter":
+                button = Button(key_row, text=key, relief="groove", width=20, height=key_height,
+                                command=lambda: insert_text('\n'))
             else:
                 button = Button(key_row, text=key, relief="groove", width=key_width, height=key_height,
                                 command=lambda k=key: insert_text(k))
@@ -353,8 +535,8 @@ def open_in_app_keyboard(img_path):
                                img_path,
                                name_entry.get().strip(),
                                desc_entry.get("1.0", "end-1c").strip(),
-                               latitude=383393.0,
-                               longitude=535353.0,
+                               latitude=50.0,
+                               longitude=50.0,
                                family=family_entry.get().strip(),
                                scientific_name=scientific_name_entry.get().strip()
                            ))
@@ -396,7 +578,7 @@ def upload_to_firebase(image_path, name, description, latitude, longitude, famil
     # Upload image URL to Firestore
     images_ref = plant_ref.collection('images').document(image_file_name)
     images_ref.set({
-        'image_url': image_url
+        'url': image_url
     })
 
     # Upload coordinates to Firestore
@@ -455,7 +637,7 @@ def show_gallery():
 
     row = 1
     col = 0
-    max_cols = 3  # Number of columns in the grid
+    max_cols = 4  # Number of columns in the grid
     thumbnail_size = (150, 150)  # Size of thumbnail images
 
     global selected_image
@@ -544,7 +726,7 @@ def navigate(page):
     if page == 'gallery':
         show_gallery()
     elif page == 'camera':
-        show_camera()
+        showCamera()
     elif page == 'map':
         show_map()
 
@@ -626,6 +808,7 @@ def show_camera():
     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
 
     update_frame()
+
 
 # Create main window
 root = Tk()
