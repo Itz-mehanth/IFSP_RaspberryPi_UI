@@ -7,20 +7,25 @@ from tkinter import *
 from tkinter.ttk import Style
 from decimal import Decimal, getcontext
 import geocoder  # Import geocoder library for location
-import cv2
 from PIL import Image, ImageTk
 import os
 from google.cloud.storage import bucket
-from tkintermapview import TkinterMapView
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
-import serial
 import pynmea2
-from roboflow import Roboflow
+from tkinter import filedialog, messagebox
+import numpy as np
+from PIL import Image
+import tensorflow as tf
+import cv2
+from tkintermapview import TkinterMapView
+import serial
 
-rf = Roboflow(api_key="EhNmtjx0o8TGBQI2Kvhr")
-project = rf.workspace().project("medplant")
-model = project.version(2).model
+# from roboflow import Roboflow
+#
+# rf = Roboflow(api_key="EhNmtjx0o8TGBQI2Kvhr")
+# project = rf.workspace().project("medplant")
+# model = project.version(2).model
 
 # Initialize Firebase if it hasn't been already
 if not firebase_admin._apps:
@@ -48,165 +53,230 @@ inference_thread = None
 cap = None
 stop_event = None
 
-def showCamera():
-    global camera_thread
-    global inference_thread
-    global cap
-    global stop_event
-    global camera_label
+# Load TFLite model
 
-    system = platform.system()
+interpreter = tf.lite.Interpreter(model_path="assets\model.tflite")
+interpreter.allocate_tensors()
 
-    # Initialize camera capture based on OS
-    if system == 'Windows':
-        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    elif system == 'Linux':  # This includes Raspberry Pi
-        cap = cv2.VideoCapture(0)
-        if not cap.isOpened():
-            cap = cv2.VideoCapture(1)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(-1)
-    else:
-        print(f"Unsupported OS: {system}")
-        return
+# Get input and output tensors
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
-    # Check if the camera was successfully opened
-    if not cap.isOpened():
-        print("Error: Cannot open camera")
-        return
+# Class names for predictions
+class_names = ['Aloevera', 'Amla', 'Amruthaballi', 'Arali', 'Astma_weed', 'Badipala',
+               'Balloon_Vine', 'Bamboo', 'Beans', 'Betel', 'Bhrami', 'Bringaraja',
+               'Caricature', 'Castor', 'Catharanthus', 'Chakte', 'Chilly',
+               'Citron lime (herelikai)', 'Common rue(naagdalli)', 'Coriender',
+               'Curry', 'Doddpathre', 'Drumstick', 'Ekka', 'Eucalyptus',
+               'Gasagase', 'Ginger', 'Globe Amarnath', 'Guava', 'Henna',
+               'Hibiscus', 'Honge', 'Insulin', 'Jackfruit', 'Jasmine',
+               'Kambajala', 'Kasambruga', 'Lantana', 'Lemon', 'Lemongrass',
+               'Malabar_Nut', 'Malabar_Spinach', 'Mango', 'Marigold',
+               'Mint', 'Neem', 'Nelavembu', 'Padri', 'Palak(Spinach)',
+               'Papaya', 'Parijatha', 'Pea', 'Pepper', 'Pomoegranate',
+               'Pumpkin', 'Raddish', 'Rose', 'Sampige', 'Sapota',
+               'Seethaashoka', 'Seethapala', 'Spinach1', 'Tamarind',
+               'Taro', 'Tecoma', 'Thumbe', 'Tomato', 'Tulsi',
+               'Turmeric', 'ashoka', 'camphor', 'laptop', 'testtest']
 
-    stop_event = threading.Event()
-    frame_queue = queue.Queue(maxsize=10)
+# Function to preprocess the image
+def preprocess_image(image_path):
+    img = Image.open(image_path).convert('RGB')
+    img = img.resize((256, 256))  # Resize to model input size
+    img_array = np.array(img).astype('float32') / 255.0  # Normalize
+    img_array = np.expand_dims(img_array, axis=0)  # Expand dimensions
+    return img_array
 
-    def capture_frames():
-        while not stop_event.is_set():
-            ret, frame = cap.read()
-            if ret:
-                frame = cv2.resize(frame, (640, 480))
-                if not frame_queue.full():
-                    frame_queue.put(frame)
-            else:
-                print("Failed to capture frame")
-                break
+# Function to classify the image
+def classify_image(image_path):
+    input_data = preprocess_image(image_path)
+    interpreter.set_tensor(input_details[0]['index'], input_data)
+    interpreter.invoke()
+    output_data = interpreter.get_tensor(output_details[0]['index'])
+    predicted_class = np.argmax(output_data[0])
+    confidence = output_data[0][predicted_class]
 
-    def perform_inference():
-        while not stop_event.is_set():
-            if not frame_queue.empty():
-                frame = frame_queue.get()
-                try:
-                    infer_and_update(frame)
-                except Exception as e:
-                    print(f"Error processing frame: {e}")
+    # Create a new window to display the image and prediction result
+    result_window = Toplevel()
+    result_window.title("Prediction Result")
 
-    # Start the threads
-    camera_thread = threading.Thread(target=capture_frames, daemon=True)
-    inference_thread = threading.Thread(target=perform_inference, daemon=True)
+    # Load and display the image
+    img = Image.open(image_path)
+    img = img.resize((256, 256))  # Resize to fit the display
+    img_tk = ImageTk.PhotoImage(img)
 
-    camera_thread.start()
+    img_label = Label(result_window, image=img_tk)
+    img_label.image = img_tk  # Keep a reference to avoid garbage collection
+    img_label.pack()
 
-    # Define the capture_image function
-    def capture_image():
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Show prediction result in the popup
+    result_text = f"Predicted Class: {class_names[predicted_class]}\nConfidence: {confidence:.2f}"
+    prediction_label = Label(result_window, text=result_text, font=("Arial", 14))
+    prediction_label.pack(pady=10)
 
-        # Directory to save captured images
-        if platform.system() == "Windows":
-            save_dir = 'C:/raspberry_images'
-        else:  # Assuming it's a Raspberry Pi or Linux-based system
-            save_dir = '/home/mehant/Pictures'
+    # Add a close button
+    close_button = Button(result_window, text="Close", command=result_window.destroy)
+    close_button.pack(pady=5)
 
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-
-        image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
-
-        try:
-            ret, frame = cap.read()
-            if ret:
-                cv2.imwrite(image_filename, frame)
-                print(f"Image captured and saved as {image_filename}")
-
-                if os.path.exists(image_filename):
-                    image = Image.open(image_filename)
-                    tk_image = ImageTk.PhotoImage(image)
-                    camera_label.config(image=tk_image)
-                    camera_label.image = tk_image
-                else:
-                    print("Error: Captured image not found.")
-            else:
-                print("Error: Failed to capture image.")
-        except Exception as e:
-            print(f"Error capturing image: {e}")
-
-    # UI setup for camera feed and capture button
-    overlay_frame = Frame(main_frame)
-    overlay_frame.pack(fill='both', expand=True)
-
-    camera_label = Label(overlay_frame)
-    camera_label.pack(fill='both', expand=True)
-
-    capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
-    capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
-
-    # Add a delay to ensure the camera is ready before starting the inference thread
-    time.sleep(1)
-    inference_thread.start()
-    def process_frame(frame):
-            # Resize the frame to the input size expected by the model
-            input_size = (416, 416)  # Example size; adjust based on your model's requirements
-            small_frame = frame
-
-            # Convert the frame to the format expected by the model
-            input_image = frame
-
-            # Perform inference using the Roboflow model
-            predictions = model.predict(input_image).json()
-
-            predictions_list = []
-            for prediction in predictions['predictions']:
-                x = int(prediction['x'])
-                y = int(prediction['y'])
-                width = int(prediction['width'])
-                height = int(prediction['height'])
-                label = prediction['class']
-                confidence = prediction['confidence']
-
-                start_point = (x - width // 2, y - height // 2)
-                end_point = (x + width // 2, y + height // 2)
-
-                prediction_dict = {
-                    'x': x,
-                    'y': y,
-                    'width': width,
-                    'height': height,
-                    'class': label,
-                    'confidence': confidence
-                }
-                predictions_list.append(prediction_dict)
-
-                # Draw bounding box on the small_frame (optional visualization)
-                color = (0, 255, 0)  # Green color for bounding box
-                thickness = 2  # Thickness of bounding box lines
-                cv2.rectangle(small_frame, start_point, end_point, color, thickness)
-
-                # Put the label above the bounding box
-                cv2.putText(small_frame, f"{label} ({confidence:.2f})", (start_point[0], start_point[1] - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-            return {'predictions': predictions_list}, small_frame
-
-    def infer_and_update(frame):
-        # Perform inference and process the result
-        result, small_frame = process_frame(frame)
-
-        # Convert the OpenCV frame (BGR) to a format suitable for Tkinter (RGB)
-        cv2image = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(cv2image)
-        imgtk = ImageTk.PhotoImage(image=img)
-
-        # Update the UI with the new image
-        camera_label.imgtk = imgtk
-        camera_label.config(image=imgtk)
-
+# def showCamera():
+#     global camera_thread
+#     global inference_thread
+#     global cap
+#     global stop_event
+#     global camera_label
+#
+#     system = platform.system()
+#
+#     # Initialize camera capture based on OS
+#     if system == 'Windows':
+#         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+#     elif system == 'Linux':  # This includes Raspberry Pi
+#         cap = cv2.VideoCapture(0)
+#         if not cap.isOpened():
+#             cap = cv2.VideoCapture(1)
+#             if not cap.isOpened():
+#                 cap = cv2.VideoCapture(-1)
+#     else:
+#         print(f"Unsupported OS: {system}")
+#         return
+#
+#     # Check if the camera was successfully opened
+#     if not cap.isOpened():
+#         print("Error: Cannot open camera")
+#         return
+#
+#     stop_event = threading.Event()
+#     frame_queue = queue.Queue(maxsize=10)
+#
+#     def capture_frames():
+#         while not stop_event.is_set():
+#             ret, frame = cap.read()
+#             if ret:
+#                 frame = cv2.resize(frame, (640, 480))
+#                 if not frame_queue.full():
+#                     frame_queue.put(frame)
+#             else:
+#                 print("Failed to capture frame")
+#                 break
+#
+#     def perform_inference():
+#         while not stop_event.is_set():
+#             if not frame_queue.empty():
+#                 frame = frame_queue.get()
+#                 try:
+#                     infer_and_update(frame)
+#                 except Exception as e:
+#                     print(f"Error processing frame: {e}")
+#
+#     # Start the threads
+#     camera_thread = threading.Thread(target=capture_frames, daemon=True)
+#     inference_thread = threading.Thread(target=perform_inference, daemon=True)
+#
+#     camera_thread.start()
+#
+#     # Define the capture_image function
+#     def capture_image():
+#         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#
+#         # Directory to save captured images
+#         if platform.system() == "Windows":
+#             save_dir = 'C:/raspberry_images'
+#         else:  # Assuming it's a Raspberry Pi or Linux-based system
+#             save_dir = '/home/mehant/Pictures'
+#
+#         if not os.path.exists(save_dir):
+#             os.makedirs(save_dir)
+#
+#         image_filename = os.path.join(save_dir, f'captured_frame_{timestamp}.png')
+#
+#         try:
+#             ret, frame = cap.read()
+#             if ret:
+#                 cv2.imwrite(image_filename, frame)
+#                 print(f"Image captured and saved as {image_filename}")
+#
+#                 if os.path.exists(image_filename):
+#                     image = Image.open(image_filename)
+#                     tk_image = ImageTk.PhotoImage(image)
+#                     camera_label.config(image=tk_image)
+#                     camera_label.image = tk_image
+#                 else:
+#                     print("Error: Captured image not found.")
+#             else:
+#                 print("Error: Failed to capture image.")
+#         except Exception as e:
+#             print(f"Error capturing image: {e}")
+#
+#     # UI setup for camera feed and capture button
+#     overlay_frame = Frame(main_frame)
+#     overlay_frame.pack(fill='both', expand=True)
+#
+#     camera_label = Label(overlay_frame)
+#     camera_label.pack(fill='both', expand=True)
+#
+#     capture_button = Button(overlay_frame, text="Capture Image", command=capture_image)
+#     capture_button.place(relx=0.5, rely=0.9, anchor='center', width=150, height=50)
+#
+#     # Add a delay to ensure the camera is ready before starting the inference thread
+#     time.sleep(1)
+#     inference_thread.start()
+#     def process_frame(frame):
+#             # Resize the frame to the input size expected by the model
+#             input_size = (416, 416)  # Example size; adjust based on your model's requirements
+#             small_frame = frame
+#
+#             # Convert the frame to the format expected by the model
+#             input_image = frame
+#
+#             # Perform inference using the Roboflow model
+#             predictions = model.predict(input_image).json()
+#
+#             predictions_list = []
+#             for prediction in predictions['predictions']:
+#                 x = int(prediction['x'])
+#                 y = int(prediction['y'])
+#                 width = int(prediction['width'])
+#                 height = int(prediction['height'])
+#                 label = prediction['class']
+#                 confidence = prediction['confidence']
+#
+#                 start_point = (x - width // 2, y - height // 2)
+#                 end_point = (x + width // 2, y + height // 2)
+#
+#                 prediction_dict = {
+#                     'x': x,
+#                     'y': y,
+#                     'width': width,
+#                     'height': height,
+#                     'class': label,
+#                     'confidence': confidence
+#                 }
+#                 predictions_list.append(prediction_dict)
+#
+#                 # Draw bounding box on the small_frame (optional visualization)
+#                 color = (0, 255, 0)  # Green color for bounding box
+#                 thickness = 2  # Thickness of bounding box lines
+#                 cv2.rectangle(small_frame, start_point, end_point, color, thickness)
+#
+#                 # Put the label above the bounding box
+#                 cv2.putText(small_frame, f"{label} ({confidence:.2f})", (start_point[0], start_point[1] - 10),
+#                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+#
+#             return {'predictions': predictions_list}, small_frame
+#
+#     def infer_and_update(frame):
+#         # Perform inference and process the result
+#         result, small_frame = process_frame(frame)
+#
+#         # Convert the OpenCV frame (BGR) to a format suitable for Tkinter (RGB)
+#         cv2image = cv2.cvtColor(small_frame, cv2.COLOR_BGR2RGB)
+#         img = Image.fromarray(cv2image)
+#         imgtk = ImageTk.PhotoImage(image=img)
+#
+#         # Update the UI with the new image
+#         camera_label.imgtk = imgtk
+#         camera_label.config(image=imgtk)
+#
 
 def getLoc():
     try:
@@ -546,7 +616,6 @@ def open_in_app_keyboard(img_path):
 def uploadToStorage(selected_image):
     open_in_app_keyboard(selected_image)
 
-
 def upload_to_firebase(image_path, name, description, latitude, longitude, family, scientific_name):
     print("Uploading")
 
@@ -587,6 +656,21 @@ def upload_to_firebase(image_path, name, description, latitude, longitude, famil
 
     print("Upload complete")
 
+# Function to delete the selected image
+def delete_selected_image():
+    global selected_image
+
+    if selected_image is not None:
+        image_path = selected_image
+        try:
+            os.remove(image_path)  # Delete the image file
+            print(f"Deleted image: {image_path}")
+            selected_image = None  # Reset selected image
+            show_gallery()  # Refresh the gallery to reflect the changes
+        except Exception as e:
+            print(f"Error deleting image {selected_image}: {e}")
+    else:
+        print("No image selected for deletion.")
 
 def show_gallery():
     if platform.system() == "Windows":
@@ -726,7 +810,7 @@ def navigate(page):
     if page == 'gallery':
         show_gallery()
     elif page == 'camera':
-        showCamera()
+        show_camera()
     elif page == 'map':
         show_map()
 
@@ -789,6 +873,9 @@ def show_camera():
                     tk_image = ImageTk.PhotoImage(image)
                     camera_label.config(image=tk_image)
                     camera_label.image = tk_image
+
+                    # Show the captured image in a popup
+                    classify_image(image_filename)
                 else:
                     print("Error: Captured image not found.")
             else:
